@@ -1,198 +1,153 @@
-package
-{
-    import flash.display.MovieClip;
-    import flash.events.Event;
-    import flash.events.EventDispatcher;
-    import flash.events.IOErrorEvent;
-    import flash.events.MouseEvent;
-    import flash.events.ProgressEvent;
-    import flash.events.TimerEvent;
-    import flash.media.Sound;
-    import flash.media.SoundChannel;
-    import flash.media.ID3Info;
-    import flash.net.URLRequest;
-    import flash.utils.Timer;
-    import flash.text.TextField;
-    import flash.text.TextFieldAutoSize;
-    import caurina.transitions.Tweener;
-     
-    public class SimpleMP3Player extends MovieClip
-    {
-        // Create some variables that we need
-        private var mp3File:Sound;
-        private var mp3FilePosition:SoundChannel;
-        private var id3Data:ID3Info;
-        private var id3InfoAvailable = false;
-         
-        private var updateTime:Timer;
-         
-        private var playingSound:Boolean = false;
-        private var soundPosition:Number;
-        private var songReachedEnd:Boolean = false;
-         
-        private var buttonPos:Array = new Array('0', '-36', '-72', '-108', '-144', '-180', '-216', '-252');
-         
-        public function SimpleMP3Player()
-        {   
-            display.playerTexts.x = -73;
-            display.mask = displayMask;
-             
-            bs.buttons.buttonMode = bs.buttons.enabled = false;
-            bs.buttons.y = buttonPos[3];
-             
-            loadMP3();
-        }
-         
-        private function loadMP3():void
-        {
-            mp3File = new Sound();
-            mp3File.addEventListener(ProgressEvent.PROGRESS, mp3FileLoading);
-            mp3File.addEventListener(Event.COMPLETE, mp3FileLoaded);
-            mp3File.addEventListener(IOErrorEvent.IO_ERROR, errorLoadingSound);
-             
-            mp3File.addEventListener(Event.ID3, getID3Data);
-            mp3File.load(new URLRequest('tarzan.mp3'));
-             
-            Tweener.addTween(display.preloader, {x: 96, time:1});
-        }
-         
-        private function mp3FileLoading(e:ProgressEvent):void
-        {
-            var currentPercent:Number = Math.round(e.bytesLoaded / e.bytesTotal * 100);
-            display.preloader.text = 'LOADING...' + currentPercent + '%';
-             
-            if (currentPercent > 50 && id3InfoAvailable)
-            {
-                Tweener.addTween(display.preloader, {x: 200, time:1, onComplete:playMP3, onCompleteParams:[false, 0]});
-                mp3File.removeEventListener(ProgressEvent.PROGRESS, mp3FileLoading);
-            }
-        }
-         
-        private function mp3FileLoaded(e:Event):void
-        {
-            mp3File.removeEventListener(Event.COMPLETE, mp3FileLoaded);
-            mp3File.removeEventListener(ProgressEvent.PROGRESS, updateBufferField);
-            Tweener.addTween(display.playerTexts.buffer, {x: 200, time:1});
-        }
-         
-        private function errorLoadingSound(e:IOErrorEvent):void
-        {
-            trace('Error loading sound: ' + e);
-        }
-         
-        private function getID3Data(e:Event):void
-        {
-            id3InfoAvailable = true;
-            id3Data = mp3File.id3;
-        }
-         
-        private function playMP3(useSp:Boolean, sp:Number):void
-        {   
-            if (useSp) mp3FilePosition = mp3File.play(sp);
-            else mp3FilePosition = mp3File.play();
-             
-            playingSound = true;
-            mp3FilePosition.addEventListener(Event.SOUND_COMPLETE, songFinished);
-            mp3File.addEventListener(ProgressEvent.PROGRESS, updateBufferField);
-             
-            bs.buttons.buttonMode = bs.buttons.enabled = true;
-            bs.buttons.y = buttonPos[0];
-             
-            bs.buttons.addEventListener(MouseEvent.MOUSE_OVER, mouseOverBs);
-            bs.buttons.addEventListener(MouseEvent.MOUSE_OUT, mouseOutBs);
-            bs.buttons.addEventListener(MouseEvent.CLICK, mouseClickBs);
-                                                 
-            updateTime = new Timer(100);
- 
-            updateTime.addEventListener(TimerEvent.TIMER, getMP3Time);
-            updateTime.start();
-             
-            var si:String = id3Data.artist + ' - ' + id3Data.songName;
-            si = si.toUpperCase();
-            display.playerTexts.songInfo.autoSize = TextFieldAutoSize.LEFT;
-            display.playerTexts.songInfo.wordWrap = false;
-            display.playerTexts.songInfo.text = si;
-             
-            Tweener.addTween(display.playerTexts, {x: 60, time:1});
-        }
-         
-        private function updateBufferField(e:ProgressEvent):void
-        {
-            var currentPercent:Number = Math.round(e.bytesLoaded / e.bytesTotal * 100);
-            display.playerTexts.buffer.text = currentPercent + '%';
-        }
-         
-        private function getMP3Time(e:TimerEvent):void
-        {
-            var totalMinutes = Math.floor(mp3File.length / 1000 / 60);
-            var totalSeconds = Math.floor(mp3File.length / 1000) % 60;
-            var currentMinutes = Math.floor(mp3FilePosition.position / 1000 / 60);
-            var currentSeconds = Math.floor(mp3FilePosition.position / 1000) % 60;
-             
-            if (totalSeconds < 10) totalSeconds = '0' + totalSeconds;
-            if (currentSeconds < 10) currentSeconds = '0' + currentSeconds;
-             
-            display.playerTexts.times.text = currentMinutes + ':' + currentSeconds + '/' + totalMinutes + ':' + totalSeconds;
-        }
-         
-        private function songFinished(e:Event):void
-        {
-            mp3FilePosition.removeEventListener(Event.SOUND_COMPLETE, songFinished);
-            updateTime.removeEventListener(TimerEvent.TIMER, getMP3Time);
-             
-            bs.buttons.y = buttonPos[3];
-            mp3FilePosition.stop();
-             
-            playingSound = false;
-            songReachedEnd = true;
-             
-            soundPosition = 0;
-            display.playerTexts.times.text = 'PLAY AGAIN?';
-        }
-         
-        /*
-        *   allButtons.bs event methods begin
-        */
-         
-        private function mouseOverBs(e:MouseEvent):void
-        {
-            if (playingSound) bs.buttons.y = buttonPos[5];
-            else bs.buttons.y = buttonPos[1];
-             
-            if (songReachedEnd && !playingSound) bs.buttons.y = buttonPos[1];
-        }
-         
-        private function mouseOutBs(e:MouseEvent):void
-        {   
-            if (playingSound) bs.buttons.y = buttonPos[0];
-            else bs.buttons.y = buttonPos[4];
-             
-            if (songReachedEnd && !playingSound) bs.buttons.y = buttonPos[3];
-        }
-         
-        private function mouseClickBs(e:MouseEvent):void
-        {
-            if (playingSound)
-            {
-                bs.buttons.y = buttonPos[4];
-                soundPosition = mp3FilePosition.position;
-                updateTime.stop();
-                mp3FilePosition.stop();
-                playingSound = false;
-                display.playerTexts.times.text = 'PAUSE';
-            }
-            else if (!playingSound)
-            {
-                bs.buttons.y = buttonPos[2];
-                playMP3(true, soundPosition);
-                playingSound = true;
-             
-            }
-            else if (songReachedEnd)
-            {
-                songReachedEnd = false;
-                playMP3(false, 0);
-            }
-        }
-    }
-}
+from mutagen.easyid3 import EasyID3
+import pygame
+from tkinter.filedialog import *
+from tkinter import *
+
+pygame.init()
+
+
+class FrameApp(Frame):
+    def __init__(self,master):
+        super(FrameApp, self).__init__(master)
+
+        self.grid()
+        self.paused = False
+        self.playlist = list()
+        self.actual_song = 0
+
+        self.b1 = Button(self, text="play", command=self.play_music, width=20)
+        self.b1.grid(row=1, column=0)
+
+        self.b2 = Button(self, text="previous", command=self.previous_song,
+                         width=20)
+        self.b2.grid(row=2, column=0)
+
+        self.b3 = Button(self, text="toggle", command=self.toggle, width=20)
+        self.b3.grid(row=3, column=0)
+
+        self.b4 = Button(self, text="next", command=self.next_song, width=20)
+        self.b4.grid(row=4, column=0)
+
+        self.b5 = Button(self, text="add to list", command=self.add_to_list,
+                         width=20)
+        self.b5.grid(row=5, column=0)
+
+        self.label1 = Label(self)
+        self.label1.grid(row=6, column=0)
+
+        self.output = Text(self, wrap=WORD, width=50)
+        self.output.grid(row=8, column=0)
+
+        # set event to not predefined value in pygame
+        self.SONG_END = pygame.USEREVENT + 1
+
+        # TODO: Make progressbar, delete songs from playlist, amplify volume
+
+    def add_to_list(self):
+        """
+        Opens window to browse data on disk and adds selected songs to play list
+        :return: None
+        """
+        directory = askopenfilenames()
+        # appends song directory on disk to playlist in memory
+        for song_dir in directory:
+            print(song_dir)
+            self.playlist.append(song_dir)
+        self.output.delete(0.0, END)
+
+        for key, item in enumerate(self.playlist):
+            # appends song to textbox
+            song = EasyID3(item)
+            song_data = (str(key + 1) + ' : ' + song['title'][0] + ' - '
+                         + song['artist'][0])
+            self.output.insert(END, song_data + '\n')
+
+    def song_data(self):
+        """
+        Makes string of current playing song data over the text box
+        :return: string - current song data
+        """
+        song = EasyID3(self.playlist[self.actual_song])
+        song_data = "Now playing: Nr:" + str(self.actual_song + 1) + " " + \
+                    str(song['title']) + " - " + str(song['artist'])
+        return song_data
+
+    def play_music(self):
+        """
+        Loads current song, plays it, sets event on song finish
+        :return: None
+        """
+        directory = self.playlist[self.actual_song]
+        pygame.mixer.music.load(directory)
+        pygame.mixer.music.play(1, 0.0)
+        pygame.mixer.music.set_endevent(self.SONG_END)
+        self.paused = False
+        self.label1['text'] = self.song_data()
+
+    def check_music(self):
+        """
+        Listens to END_MUSIC event and triggers next song to play if current 
+        song has finished
+        :return: None
+        """
+        for event in pygame.event.get():
+            if event.type == self.SONG_END:
+                self.next_song()
+
+    def toggle(self):
+        """
+        Toggles current song
+        :return: None
+        """
+        if self.paused:
+            pygame.mixer.music.unpause()
+            self.paused = False
+        elif not self.paused:
+            pygame.mixer.music.pause()
+            self.paused = True
+
+    def get_next_song(self):
+        """
+        Gets next song number on playlist
+        :return: int - next song number
+        """
+        if self.actual_song + 2 <= len(self.playlist):
+            return self.actual_song + 1
+        else:
+            return 0
+
+    def next_song(self):
+        """
+        Plays next song
+        :return: None
+        """
+        self.actual_song = self.get_next_song()
+        self.play_music()
+
+    def get_previous_song(self):
+        """
+        Gets previous song number on playlist and returns it
+        :return: int - prevoius song number on playlist
+        """
+        if self.actual_song - 1 >= 0:
+            return self.actual_song - 1
+        else:
+            return len(self.playlist) - 1
+
+    def previous_song(self):
+        """
+        Plays prevoius song
+        :return: 
+        """
+        self.actual_song = self.get_previous_song()
+        self.play_music()
+
+
+root = Tk()
+root.geometry("350x500")
+app = FrameApp(root)
+
+while True:
+    # runs mainloop of program
+    app.check_music()
+    app.update()
